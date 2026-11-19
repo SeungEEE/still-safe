@@ -1,5 +1,5 @@
 ---
-name: 기능
+name: 기능 요청
 about: 새로 만들거나 바꿀 기능
 title: "[기능] "
 labels: feature
