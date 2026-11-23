@@ -13,6 +13,7 @@ last_seen = {}
 device_ok = {}
 latest = {}
 last_level = None
+short_since = None
 
 def on_connect(client, userdata, flags, reason_code, properties):
     print("접속 결과: ", reason_code)
@@ -74,7 +75,15 @@ while True:
     hand = latest.get("stillsafe/hand")
     fall = latest.get("stillsafe/fall")
 
-    level, reason = decide_level(hand, fall, all_ok)
+    if fall is not None and fall["people"] < 2:
+        if short_since is None:
+            short_since = now
+        short_sec = now - short_since
+    else:
+        short_since = None
+        short_sec = 0
+
+    level, reason = decide_level(hand, fall, all_ok, short_sec)
 
     if (level, reason) != last_level:
         print(f"단계 {level} ({reason})")
