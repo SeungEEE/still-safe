@@ -1,6 +1,7 @@
 import paho.mqtt.client as mqtt
 import json
 import time
+from central.rules import decide_level
 
 REQUIRED = {
     "stillsafe/hand": ["v", "seq", "ts", "zone", "signal"],
@@ -10,6 +11,8 @@ REQUIRED = {
 TIMEOUT_SEC = 3
 last_seen = {}
 device_ok = {}
+latest = {}
+last_level = None
 
 def on_connect(client, userdata, flags, reason_code, properties):
     print("접속 결과: ", reason_code)
@@ -43,6 +46,8 @@ def on_message(client, userdata, msg):
             print(msg.topic, "seq =", data["seq"], f"(지난번보다 {gap:.1f}초 뒤)")
     else:
         print(msg.topic, "seq =", data["seq"], "(처음 메시지)")
+
+    latest[msg.topic] = data
     last_seen[msg.topic] = now
 
 
@@ -64,4 +69,14 @@ while True:
             else:
                 print(topic, "장치 이상")
             device_ok[topic] = ok
+
+    all_ok = device_ok["stillsafe/hand"] and device_ok["stillsafe/fall"]
+    hand = latest.get("stillsafe/hand")
+    fall = latest.get("stillsafe/fall")
+
+    level, reason = decide_level(hand, fall, all_ok)
+
+    if (level, reason) != last_level:
+        print(f"단계 {level} ({reason})")
+        last_level = (level, reason)
     time.sleep(1)
