@@ -8,8 +8,10 @@ def decide_level(hand, fall, all_ok, short_sec):
     # 3 위험
     if not all_ok:
         return 3, "device_error"
+    
     if hand["signal"]["inner"]:
         return 3, "hand_inner"
+    
     if fall["signal"]["fall"]:
         return 3, "fall"
 
