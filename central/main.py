@@ -11,12 +11,14 @@ REQUIRED = {
 
 
 TIMEOUT_SEC = 3    # 이 시간 동안 정상 메시지 없을 시 장치 이상
+HOLD_SEC = 2       # 주의, 경고 조건 사라지고 이 시간 뒤에 내려감
 
 last_seen = {}     # 마지막으로 정상 메시지 받은 시각
 device_ok = {}     # 지난번 체크 시 장치 정상 여부
 latest = {}        # 마지막으로 받은 정상 메시지
 last_level = None  # 마지막으로 결정한 단계
 short_since = None # 인원 부족이 시작된 시각
+drop_since = None  # 더 낮은 단계 판단이 시작된 시각
 
 def on_connect(client, userdata, flags, reason_code, properties):
     print("접속 결과: ", reason_code)
@@ -102,6 +104,17 @@ while True:
 
     # 3) 단계 결정
     level, reason = decide_level(hand, fall, all_ok, short_sec)
+
+    if last_level is not None and level < last_level[0] and last_level[0] in (1, 2):
+        if drop_since is None:
+            drop_since = now
+
+        if now - drop_since < HOLD_SEC:
+            level, reason = last_level
+        else:
+            drop_since = None
+    else:
+        drop_since = None
 
     if (level, reason) != last_level:
         print(f"단계 {level} ({reason})")
