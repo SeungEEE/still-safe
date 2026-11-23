@@ -1,10 +1,15 @@
 import paho.mqtt.client as mqtt
 import json
+import time
 
 REQUIRED = {
     "stillsafe/hand": ["v", "seq", "ts", "zone", "signal"],
     "stillsafe/fall": ["v", "seq", "ts", "people", "lying", "lying_sec", "signal"],
 }
+
+TIMEOUT_SEC = 3
+last_seen = {}
+device_ok = {}
 
 def on_connect(client, userdata, flags, reason_code, properties):
     print("접속 결과: ", reason_code)
@@ -31,11 +36,32 @@ def on_message(client, userdata, msg):
             print("키가 JSON 데이터에 없습니다.", msg.topic, key)
             return
     
-    print(msg.topic, "seq =", data["seq"])
+    now = time.time()
+    if msg.topic in last_seen:
+        gap = now - last_seen[msg.topic]
+        if gap > TIMEOUT_SEC:
+            print(msg.topic, "seq =", data["seq"], f"(지난번보다 {gap:.1f}초 뒤)")
+    else:
+        print(msg.topic, "seq =", data["seq"], "(처음 메시지)")
+    last_seen[msg.topic] = now
 
 
 client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
 client.on_connect = on_connect
 client.on_message = on_message
 client.connect("localhost", 1883)
-client.loop_forever()
+client.loop_start()
+
+while True:
+    now = time.time()
+    for topic in REQUIRED:
+        ok = topic in last_seen and (now - last_seen[topic]) <= TIMEOUT_SEC
+        before = device_ok.get(topic)
+
+        if ok != before:
+            if ok:
+                print(topic, "정상")
+            else:
+                print(topic, "장치 이상")
+            device_ok[topic] = ok
+    time.sleep(1)
