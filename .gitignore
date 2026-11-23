@@ -4,3 +4,8 @@
 # Python
 .venv/
 __pycache__/
+
+# fall_detection
+data/
+.vscode/
+*.pt
