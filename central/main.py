@@ -1,14 +1,9 @@
 import paho.mqtt.client as mqtt
 import json
 import time
+import os
 from central.rules import decide_level
-
-# 토픽 별 필수 값
-REQUIRED = {
-    "stillsafe/hand": ["v", "seq", "ts", "zone", "signal"],
-    "stillsafe/fall": ["v", "seq", "ts", "people", "lying", "lying_sec", "signal"],
-}
-
+from common.messages import SCHEMA, check
 
 TIMEOUT_SEC = 3    # 이 시간 동안 정상 메시지 없을 시 장치 이상
 HOLD_SEC = 2       # 주의, 경고 조건 사라지고 이 시간 뒤에 내려감
@@ -19,6 +14,7 @@ latest = {}        # 마지막으로 받은 정상 메시지
 last_level = None  # 마지막으로 결정한 단계
 short_since = None # 인원 부족이 시작된 시각
 drop_since = None  # 더 낮은 단계 판단이 시작된 시각
+offline = set()    # offline 알려온 장치
 
 def on_connect(client, userdata, flags, reason_code, properties):
     print("접속 결과: ", reason_code)
@@ -28,28 +24,34 @@ def on_connect(client, userdata, flags, reason_code, properties):
 
 def on_message(client, userdata, msg):
 
-    # 메시지 처리
-    text = msg.payload.decode()
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError:
-        print("JSON 디코딩 오류:", text)
+    # 연결 상태 메시지
+    if msg.topic.startswith("stillsafe/status/"):
+        name = msg.topic.split("/")[-1]
+        data_topic = "stillsafe/" + name
+        state = msg.payload.decode()
+        print(data_topic, "상태:", state)
+        if state == "offline":
+            offline.add(data_topic)
+        else:
+            offline.discard(data_topic)
         return
 
-    # 메시지 유효성 검사
-    if not isinstance(data, dict):
-        print("JSON 데이터가 딕셔너리가 아닙니다:", text)
-        return
-
-    # 필수 키 확인
-    if msg.topic not in REQUIRED:
+    if msg.topic not in SCHEMA:
         print("알 수 없는 토픽:", msg.topic)
         return
-    
-    for key in REQUIRED[msg.topic]:
-        if key not in data:
-            print("키가 JSON 데이터에 없습니다.", msg.topic, key)
-            return
+
+    # JSON 읽기 (깨진 바이트나 JSON 이 아닌 글자는 버림)
+    try:
+        data = json.loads(msg.payload.decode())
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        print("JSON 으로 못 읽음:", msg.topic, msg.payload[:80])
+        return
+
+    # 형식 검사 (규칙은 common/messages.py 의 SCHEMA)
+    why = check(data, SCHEMA[msg.topic])
+    if why:
+        print("버림:", msg.topic, why)
+        return
 
     # 처음 받았거나 오래 끊겼다가 다시 온 경우
     now = time.time()
@@ -69,7 +71,7 @@ def on_message(client, userdata, msg):
 client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
 client.on_connect = on_connect
 client.on_message = on_message
-client.connect("localhost", 1883)
+client.connect(os.getenv("MQTT_HOST", "localhost"), 1883)
 
 # MQTT 메시지 수신 루프 시작
 client.loop_start()
@@ -78,8 +80,11 @@ while True:
     now = time.time()
 
     # 1) 장치 정상 여부 확인
-    for topic in REQUIRED:
-        ok = topic in last_seen and (now - last_seen[topic]) <= TIMEOUT_SEC
+    for topic in SCHEMA:
+        ok = (topic in last_seen
+              and (now - last_seen[topic]) <= TIMEOUT_SEC
+              and topic not in offline)
+
         before = device_ok.get(topic)
 
         if ok != before:
@@ -119,4 +124,4 @@ while True:
     if (level, reason) != last_level:
         print(f"단계 {level} ({reason})")
         last_level = (level, reason)
-    time.sleep(1)
+    time.sleep(0.1)
