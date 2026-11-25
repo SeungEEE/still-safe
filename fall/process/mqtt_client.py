@@ -1,23 +1,20 @@
 import json, time
 import paho.mqtt.client as mqtt
 
-BROKER_IP = "192.168.20.21"
-BROKER_PORT = 1883
-TOPIC = "stillsafe/fall"
+class FallMqttClient:
+    def __init__(self, host, port, topic):
+        self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)  # paho-mqtt 2.x
+        self.client.connect(host, port, keepalive=5)
+        self.client.loop_start()
+        self.topic = topic
+        self.seq = 0
 
-client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)  # paho-mqtt 2.x
-client.connect(BROKER_IP, BROKER_PORT, keepalive=5)
-client.loop_start()
-
-def mqtt_client(people, lying, lying_sec, signal, conf, infer_ms):
-    seq = 0
-    try:
+    def publish_frame(self, people, lying, lying_sec, signal, conf, infer_ms):
         while True:
             frame_time = time.time()   # 프레임을 찍은 시각
-            # ... 탐지 → zone, hands ...
             msg = {
                 "v": 1,
-                "seq": seq,
+                "seq": self.seq,
                 "ts": frame_time, # 1763452800.456
                 "people": people, # 2
                 "lying": lying, # True
@@ -26,14 +23,9 @@ def mqtt_client(people, lying, lying_sec, signal, conf, infer_ms):
                 "conf": conf, # 0.81
                 "infer_ms": infer_ms # 0.143
             }
-            client.publish(TOPIC, json.dumps(msg))
-            seq += 1
-            print("보내기 완료")
-            time.sleep(0.1)
+            self.client.publish(self.topic, json.dumps(msg))
+            self.seq += 1
 
-    except KeyboardInterrupt:
-        print("\n종료 중...")
-
-    finally:
-        client.loop_stop()
-        client.disconnect()
+    def close(self):
+        self.client.loop_stop()
+        self.client.disconnect()
