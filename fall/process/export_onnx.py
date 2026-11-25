@@ -4,17 +4,18 @@ import onnx
 import onnxruntime as ort
 from ultralytics import YOLO
 
-YOLO("yolo11n-pose.pt").export(format="onnx", imgsz=320, opset=17)
+def export_onnx():
+    YOLO("yolo11n-pose.pt").export(format="onnx", imgsz=320, opset=17)
 
-model = Fall1DCNN()
+    model = Fall1DCNN()
+    model.eval()
+    dummy = torch.randn(1, 38, 10)
+    print("model(dummy) =", model(dummy).detach().numpy())
+    torch.onnx.export(model, dummy, "fall1dcnn.onnx", dynamo=False)
 
-model.eval()
+export_onnx()
 
-dummy = torch.randn(1, 38, 10)
-
-print("model(dummy) =", model(dummy).detach().numpy())
-
-torch.onnx.export(model, dummy, "fall1dcnn.onnx", dynamo=False)
+# 2026-11-25 임시 ONNX 만들기 끝
 
 # print("저장:", "fall1dcnn.onnx")
 

@@ -3,3 +3,4 @@ conda activate still-safe
 pip install imageio-ffmpeg
 pip install torch torchvision ultralytics opencv-python numpy tqdm scikit-learn matplotlib jupyter kagglehub
 pip install onnx onnxruntime onnxscript onnxslim
+pip install paho-mqtt
