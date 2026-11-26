@@ -11,6 +11,8 @@ HOLD_SEC = 2       # 주의, 경고 조건 사라지고 이 시간 뒤에 내려
 PING_SEC = 0.2         # ESP32 에 PING 보내는 간격 (ESP32 워치독은 0.5초)
 PONG_TIMEOUT_SEC = 1   # 이 시간 동안 PONG 이 없으면 ESP32 응답 없음
 REOPEN_SEC = 2         # ESP32 포트가 닫혔을 때 다시 열어 보는 간격
+STATE_TOPIC = "stillsafe/central/state"   # 화면, 웹이 구독하는 중앙 상태
+STATE_SEC = 1          # 상태가 그대로여도 이 간격마다 한 번씩 발행
 
 last_seen = {}     # 마지막으로 정상 메시지 받은 시각
 device_ok = {}     # 지난번 체크 시 장치 정상 여부
@@ -22,12 +24,15 @@ offline = set()    # offline 알려온 장치
 last_ping = 0      # 마지막으로 PING 보낸 시각
 sent_level = None  # ESP32 에 마지막으로 보낸 단계 (다시 연결되면 None 으로 되돌려 다시 보냄)
 esp_ok = None      # 지난번 체크 시 ESP32 응답 여부
+last_state = None  # 마지막으로 발행한 상태 (ts 제외)
+last_state_pub = 0 # 마지막으로 상태 발행한 시각
 
 def on_connect(client, userdata, flags, reason_code, properties):
     print("접속 결과: ", reason_code)
 
     # 다시 연결 됐을 때 구독도 다시 등록
-    client.subscribe("stillsafe/#")
+    # stillsafe/# 로 전부 구독하면 내가 발행한 상태 토픽까지 다시 받으므로 필요한 것만
+    client.subscribe([("stillsafe/hand", 0), ("stillsafe/fall", 0), ("stillsafe/status/#", 0)])
 
 def on_message(client, userdata, msg):
 
@@ -154,5 +159,24 @@ while True:
     # 4) 단계가 바뀌었으면 ESP32 에 알림 (보내기 실패하면 다음 바퀴에 다시)
     if level != sent_level and esp.send(f"LEVEL:{level}"):
         sent_level = level
+
+    # 5) 상태 발행 (화면, 웹용): 무엇이든 바뀌면 바로, 아니면 STATE_SEC 마다
+    state = {
+        "v": 1,
+        "level": level,
+        "reason": reason,
+        "motor": esp.motor,       # 아직 모르면 None (JSON 에서는 null)
+        "latched": esp.latched,
+        "devices": {
+            "hand": device_ok["stillsafe/hand"],
+            "fall": device_ok["stillsafe/fall"],
+            "esp32": esp_ok,
+        },
+    }
+    if state != last_state or now - last_state_pub >= STATE_SEC:
+        # retain: 화면을 나중에 켜도 마지막 상태를 바로 받음
+        client.publish(STATE_TOPIC, json.dumps({**state, "ts": now}), retain=True)
+        last_state = state
+        last_state_pub = now
 
     time.sleep(0.1)

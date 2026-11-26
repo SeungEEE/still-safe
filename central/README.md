@@ -51,7 +51,13 @@ python -m central.main
 [ESP32 받는 스레드]  한 줄씩 읽기 -> PONG 시각, MOTOR, LATCH 저장
 [메인 while, 0.1초]  ESP32 다시 열기 / PING -> 장치 정상 여부 -> 인원 부족 시간
                      -> decide_level -> 유지 규칙 -> 바뀌면 출력 + LEVEL 전송
+                     -> 상태 발행 (stillsafe/central/state)
 ```
+
+## 상태 발행 (화면, 웹용)
+- 토픽 `stillsafe/central/state`, retain. 단계, 이유, 모터, 잠금, 장치 연결을 담는다. 형식은 `display/README.md`.
+- 무엇이든 바뀌면 바로, 그대로면 1초마다(`STATE_SEC`) 발행한다.
+- 중앙은 `stillsafe/hand`, `stillsafe/fall`, `stillsafe/status/#`만 구독한다. `stillsafe/#`로 다 구독하면 자기가 발행한 상태를 다시 받는다.
 
 ## ESP32 연결 (통신 약속 6장)
 - 포트를 열면 ESP32가 재부팅될 수 있어서 2초 기다린 뒤, 그동안 들어온 글자는 버린다.
@@ -103,6 +109,7 @@ python -m central.main
 | `PING_SEC` | 0.2 | `PING` 보내는 간격 |
 | `PONG_TIMEOUT_SEC` | 1 | 이 시간 넘게 `PONG`이 없으면 응답 없음 |
 | `REOPEN_SEC` | 2 | 포트가 닫혔을 때 다시 열어 보는 간격 |
+| `STATE_SEC` | 1 | 상태가 그대로일 때 발행 간격 |
 
 ## 진행 상황
 | 단계 | 내용 | 상태 |
