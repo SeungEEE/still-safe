@@ -56,6 +56,9 @@ def Custom_Le2i(vid_path):
 
 vid_files = sorted(glob.glob(f"{DATA_DIR}/**/*.avi", recursive=True))
 
-data_labels, feats = Custom_Le2i(vid_files[0])
-
-print(np.array(data_labels).shape, feats.shape)
+for vid_file in vid_files:
+  data_labels, feats = Custom_Le2i(vid_file)
+  
+  print(f"{vid_file} 완료.")
+  print(np.array(data_labels).shape, feats.shape)
+  print()

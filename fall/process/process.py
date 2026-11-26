@@ -2,71 +2,49 @@ import cv2
 import numpy as np
 from collections import deque
 
-def extract_math_features(kpts_seq):
-    """
-    kpts_seq: (T, 17, 3) -> [x, y, conf]
-    반환: (T, 38) float32
-      - [0:34]  골반 중심 기준 & 척추 길이 정규화된 17개 관절 (x, y) 좌표
-      - [34]    몸통 기울기 각도 (rad, 수직=0, 수평=pi/2)
-      - [35]    높이 대비 너비 비율 (H / W, 서있음>2, 누움<1)
-      - [36]    척추 길이 정규화 하강 속도 (vy, 양수=아래로 낙하)
-      - [37]    상체 중심(어깨) 상대 높이 비율 ((발목_y - 어깨_y) / 척추길이)
-    """
+def extract_math_features(kpts_seq, prev_head_y=None, return_state=False):
     T = len(kpts_seq)
     feats = np.zeros((T, 38), dtype=np.float32)
-    prev_head_y = None
 
     for t in range(T):
         kpts = kpts_seq[t]
         xy = kpts[:, :2]
         conf = kpts[:, 2]
 
-        # 1. 사람이 감지되지 않은 프레임(0 벡터) 예외 처리
         if np.sum(conf > 0.3) < 4:
             prev_head_y = None
             continue
 
-        # 2. 주요 신체 중심점 계산 (COCO 17 관절 인덱스)
-        # 0: 코, 5-6: 어깨, 11-12: 엉덩이(골반), 15-16: 발목
         shoulder = (xy[5] + xy[6]) * 0.5
         hip = (xy[11] + xy[12]) * 0.5
         ankle = (xy[15] + xy[16]) * 0.5
 
-        # 척추 벡터 (골반 -> 어깨) 및 척추 길이 (정규화 기준 스케일)
         torso_vec = shoulder - hip
         torso_len = np.linalg.norm(torso_vec)
         if torso_len < 1e-3:
             prev_head_y = None
             continue
 
-        # 3. 위치·크기 불변 정규화 관절 좌표 (34차원)
         norm_xy = (xy - hip) / torso_len
         feats[t, :34] = norm_xy.flatten()
 
-        # 4. 도메인 수학 수식 피처 4개
-        # ① 몸통 기울기 각도 (수직선 대비 각도, 이미지 y축은 아래가 +이므로 -dy 사용)
         dx, dy = torso_vec[0], torso_vec[1]
         torso_angle = np.arctan2(abs(dx), max(-dy, 1e-3))
 
-        # ② 사람 바운딩 박스 높이/너비 비율 (H / W)
         valid_xy = xy[conf > 0.3]
         w = np.max(valid_xy[:, 0]) - np.min(valid_xy[:, 0])
         h = np.max(valid_xy[:, 1]) - np.min(valid_xy[:, 1])
         aspect_ratio = h / (w + 1e-6)
 
-        # ③ 0.1초(10 FPS) 간격 정규화 수직 하강 속도 (머리/어깨 기준)
         head_y = xy[0, 1] if conf[0] > 0.3 else shoulder[1]
-        if prev_head_y is not None:
-            vy = (head_y - prev_head_y) / torso_len
-        else:
-            vy = 0.0
+        vy = (head_y - prev_head_y) / torso_len if prev_head_y is not None else 0.0
         prev_head_y = head_y
 
-        # ④ 발목 대비 어깨 상대 높이 비율
         rel_height = (ankle[1] - shoulder[1]) / torso_len
-
         feats[t, 34:] = [torso_angle, aspect_ratio, vy, rel_height]
 
+    if return_state:
+        return feats, prev_head_y
     return feats
 
 def iou(box, boxes):
@@ -120,7 +98,7 @@ def preprocess(frame):
 
     return lb, ratio, (padl, padt), x
 
-def postprocess(raw_onnx, padl, padt, ratio, dq):
+def postprocess(raw_onnx, padl, padt, ratio, dq, prev_head_y=None):
     boxes, scores, kpts = decode_pose_yolo(raw_onnx)
     people = int(len(boxes))
 
@@ -134,10 +112,12 @@ def postprocess(raw_onnx, padl, padt, ratio, dq):
         best_kpts = np.zeros((17, 3), dtype=np.float32)
         pose_conf = 0.0
 
-    feat_38 = extract_math_features(best_kpts[None, ...])[0]  # (38,)
+    feats, next_head_y = extract_math_features(
+        best_kpts[None, ...], prev_head_y=prev_head_y, return_state=True
+    )
+    feat_38 = feats[0]
     dq.append(feat_38)
 
-    # 기하학 상태 판단용 딕셔너리 추출
     geom = {
         "valid": people > 0 and float(np.sum(feat_38 != 0)) > 0,
         "norm_xy": feat_38[:34].reshape(17, 2),
@@ -146,7 +126,7 @@ def postprocess(raw_onnx, padl, padt, ratio, dq):
     }
 
     if len(dq) < 10:
-        return None, people, pose_conf, geom
+        return None, people, pose_conf, geom, next_head_y
 
     feature = np.array(dq, dtype=np.float32).T[None, ...]  # (1, 38, 10)
-    return feature, people, pose_conf, geom
+    return feature, people, pose_conf, geom, next_head_y

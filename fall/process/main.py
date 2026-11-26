@@ -124,7 +124,7 @@ class FallDetectionSystem:
 
                 is_fall = False
                 if feature is not None:
-                    r_onnx = self.sess_fall.run(None, {"input.1": feature})[0]
+                    r_onnx = self.sess_fall.run(None, {"input": feature})[0]
                     exp_logits = np.exp(r_onnx - np.max(r_onnx, axis=1, keepdims=True))
                     probs = exp_logits / np.sum(exp_logits, axis=1, keepdims=True)
                     is_fall = bool(probs[0, 1] > 0.5)
