@@ -4,3 +4,8 @@
 # Python
 .venv/
 __pycache__/
+
+# Arduino (VS Code Arduino Maker Workshop)
+firmware/**/build/
+arduino.json
+c_cpp_properties.json
