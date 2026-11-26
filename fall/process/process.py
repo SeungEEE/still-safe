@@ -120,28 +120,33 @@ def preprocess(frame):
 
     return lb, ratio, (padl, padt), x
 
-def postprocess(raw_onnx, padl, padt, ratio, dq:deque):
+def postprocess(raw_onnx, padl, padt, ratio, dq):
     boxes, scores, kpts = decode_pose_yolo(raw_onnx)
     people = int(len(boxes))
 
     if people > 0:
-    # 레터박스 패딩 제거 및 비율 역보정 -> 원본 frame(480x640) 좌표로 복원
         boxes = (boxes - [padl, padt, padl, padt]) / ratio
         kpts[..., :2] = (kpts[..., :2] - [padl, padt]) / ratio
-
-        # 가장 신뢰도가 높은 사람 1명의 (17, 3) 관절 추출
         best_idx = int(np.argmax(scores))
         best_kpts = kpts[best_idx]
-        pose_conf = float(scores[best_idx])
+        pose_conf = round(float(scores[best_idx]), 3)
     else:
         best_kpts = np.zeros((17, 3), dtype=np.float32)
         pose_conf = 0.0
 
-    feature = extract_math_features(best_kpts[None, ...])[0] # (38, )
-    dq.append(feature)
+    feat_38 = extract_math_features(best_kpts[None, ...])[0]  # (38,)
+    dq.append(feat_38)
+
+    # 기하학 상태 판단용 딕셔너리 추출
+    geom = {
+        "valid": people > 0 and float(np.sum(feat_38 != 0)) > 0,
+        "norm_xy": feat_38[:34].reshape(17, 2),
+        "torso_deg": float(np.degrees(feat_38[34])),
+        "aspect_ratio": float(feat_38[35]),
+    }
 
     if len(dq) < 10:
-        return None, people, pose_conf
+        return None, people, pose_conf, geom
 
-    feature = np.array(dq, dtype=np.float32).T[None, ...] # (1, 38, 10)
-    return feature, people, pose_conf
+    feature = np.array(dq, dtype=np.float32).T[None, ...]  # (1, 38, 10)
+    return feature, people, pose_conf, geom
