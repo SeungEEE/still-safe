@@ -1,0 +1,108 @@
+# ==========================================
+# 01. Python Virtual Environment
+# ==========================================
+.venv/
+venv/
+env/
+
+
+# ==========================================
+# 02. Python Cache & Build
+# ==========================================
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+
+# ==========================================
+# 03. Jupyter & IDE
+# ==========================================
+.ipynb_checkpoints/
+.vscode/
+.idea/
+
+
+# ==========================================
+# 04. Environment Variables & Security
+# ==========================================
+.env
+.env.*
+!.env.example
+
+secrets/
+credentials.json
+
+
+# ==========================================
+# 05. Datasets
+# ==========================================
+datasets/
+data/raw/
+data/processed/
+
+*.zip
+*.tar.gz
+
+
+# ==========================================
+# 06. Model Weights & Checkpoints
+# ==========================================
+weights/
+checkpoints/
+
+*.pt
+*.pth
+*.safetensors
+*.ckpt
+
+
+# ==========================================
+# 07. Exported & Optimized Models
+# ==========================================
+*.onnx
+*.onnx.data
+*.engine
+*.tflite
+*.ncnn.param
+*.ncnn.bin
+
+*_ncnn_model/
+*_openvino_model/
+
+
+# ==========================================
+# 08. Training & Inference Results
+# ==========================================
+runs/
+outputs/
+wandb/
+mlruns/
+logs/
+
+*.log
+
+
+# ==========================================
+# 09. OS & Temporary Files
+# ==========================================
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+
+# ==========================================
+# 10. Files to Keep Tracked
+# ==========================================
+# README.md
+# requirements.txt
+# Python source files
+# Jupyter notebooks
+# YAML configuration files
+# Experiment reports
+# Benchmark CSV files
